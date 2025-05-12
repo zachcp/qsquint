@@ -7,19 +7,6 @@ format:
 ---
 
 
-<div class="some-node"></div>
-
-<script>
-  import {EditorView, keymap} from "@codemirror/view"
-  import {defaultKeymap} from "@codemirror/commands"
-
-  let myView = new EditorView({
-    doc: "hello there ",
-    extensions: [keymap.of(defaultKeymap)],
-    parent: document.body
-  });
-
-</script>
 
 This is a Quarto website.
 
@@ -166,8 +153,11 @@ extensions = [
   code_mirror_view.drawSelection(),
   code_mirror_view.keymap.of(clojure_mode.complete_keymap), 
   code_mirror_view.keymap.of(code_mirror_commands.historyKeymap),
+  
+  // the issues are here....
   // clojure_mode.default_extensions[3],
-  // clojure_mode_extensions.extension({modifier: "Meta"}),
+  clojure_mode_extensions.extension({modifier: "Meta"}),
+
   squintExtension({modifier: "Meta"})
 ];
 ```
