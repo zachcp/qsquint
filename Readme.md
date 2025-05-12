@@ -7,4 +7,10 @@ A quarto conversion of [squint-molstar](https://github.com/zachcp/squint-molstar
 this uses Quarto.
 
 
+```sh
+git clone https://github.com/zachcp/qsquint
+cd qsquint
+quarto preview
+```
+
 
