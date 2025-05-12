@@ -1,0 +1,233 @@
+---
+title: "qsquint"
+toc: false
+format: 
+  html:
+    page-layout: full
+---
+
+
+<div class="some-node"></div>
+
+<script>
+  import {EditorView, keymap} from "@codemirror/view"
+  import {defaultKeymap} from "@codemirror/commands"
+
+  let myView = new EditorView({
+    doc: "hello there ",
+    extensions: [keymap.of(defaultKeymap)],
+    parent: document.body
+  });
+
+</script>
+
+This is a Quarto website.
+
+To learn more about Quarto websites visit <https://quarto.org/docs/websites>.
+
+
+
+```{ojs}
+// Library Imports
+squint_core = import("https://cdn.jsdelivr.net/npm/squint-cljs@0.8.147/src/squint/core.js");
+squint = import("https://cdn.jsdelivr.net/npm/squint-cljs@0.8.147/lib/compiler.js");
+
+// make this available in the outerscore
+window.squint_core = squint_core;
+
+molstar = require("molstar@4.14.1/build/viewer/molstar.js");
+
+clojure_mode = import("https://cdn.jsdelivr.net/npm/@nextjournal/clojure-mode@0.3.3/+esm");
+code_mirror_view = import("https://cdn.jsdelivr.net/npm/@codemirror/view@6.36.8/+esm");
+code_mirror_state = import("https://cdn.jsdelivr.net/npm/@codemirror/state@6.5.2/+esm");
+code_mirror_commands = import("https://cdn.jsdelivr.net/npm/@codemirror/commands/+esm");
+code_mirror_language = import("https://cdn.jsdelivr.net/npm/@codemirror/language/+esm");
+clojure_mode_extensions = import("https://cdn.jsdelivr.net/npm/@nextjournal/clojure-mode/extensions/eval-region/+esm")
+
+
+function compile(code) {
+  let compilerState = squint.compileStringEx(
+    `(do ${code})`, {repl: false, context: 'return', "elide-exports": true}, null);
+  let js = compilerState.javascript;
+  let import_index = js.indexOf('\n');
+  let newString2 = js.substring(import_index + 1);
+  console.log("About to eval...")
+  let result = {value: eval(`(async function() { ${newString2} })()`)};
+  console.log(result.value);
+  return result.value
+}
+```
+
+
+
+```{ojs}
+example_code = `(defn nodize
+  "Transforms a hiccup-like vector [:name props children] into a node map."
+  [form]
+  (let [[name-val props-val children-val] form]
+    (cond-> {"kind" name-val}
+      (not (empty? props-val)) (assoc "params" props-val)
+      (seq children-val) (assoc "children" (mapv nodize children-val)))))
+
+  (def state-01
+    (nodize
+      [:root {}
+        [[:download {:url "https://files.wwpdb.org/download/1cbs.cif"}
+          [[:parse {:format "mmcif"}
+            [[:structure {:type "model"}
+              [[:component {:selector "all"}
+                [[:representation {:type "cartoon"}
+                  [[:color {:color "blue"} nil]]]]]]]]]]]]]))
+
+{:kind "single" 
+  :root state-01
+  :metadata {
+    :version "1.4" 
+    :timestamp "2025-04-14T19:04:58.549065+00:00"
+  }}
+`
+
+theme = code_mirror_view.EditorView.theme({
+  ".cm-content": {whitespace: "pre-wrap",
+                  padding: "10px 0",
+                  flex: "1 1 0"},
+
+  "&.cm-focused": {outline: "0 !important"},
+  ".cm-line": {"padding": "0 9px",
+               "line-height": "1.6",
+               "font-size": "16px",
+               "font-family": "var(--code-font)"},
+  ".cm-matchingBracket": {"border-bottom": "1px solid var(--teal-color)",
+                          "color": "inherit"},
+  ".cm-gutters": {background: "transparent",
+                  border: "none"},
+  ".cm-gutterElement": {"margin-left": "5px"},
+  // only show cursor when focused
+  ".cm-cursor": {visibility: "hidden"},
+  "&.cm-focused .cm-cursor": {visibility: "visible"}
+});
+```
+
+
+```{ojs}
+clojure_mode
+```
+
+## Load MolStar
+
+```{ojs}
+
+app = document.querySelector("#molstar");
+
+cljs_viewer = molstar.Viewer.create(app, {
+  layoutIsExpanded: false,
+  layoutShowControls: false,
+  layoutShowRemoteState: false,
+  layoutShowSequence: true,
+  layoutShowLog: false,
+  layoutShowLeftPanel: false,
+  viewportShowExpand: true,
+  viewportShowSelectionMode: false,
+  viewportShowAnimation: false,
+  pdbProvider: "rcsb",
+  emdbProvider: "rcsb"
+});
+```
+
+
+## Load CodeMirror
+
+
+```{ojs}
+evalCell = async (opts) => {
+  let code = opts.state.doc.toString();
+  console.log("Evaluating Cell Code");
+  try {
+    console.log("Trying compile...");
+    const result = await compile(code);
+    console.log("Compiled!");
+    const viewer = await cljs_viewer;
+    viewer.loadMvsData(JSON.stringify(result), "mvsj", {replaceExisting: true} )
+  } catch (error) {
+    console.error("Compilation error:", error);
+  }
+  return true;
+}
+
+squintExtension = () => {
+  return code_mirror_view.keymap.of([{key: "Alt-Enter", run: evalCell}])
+}
+
+extensions = [
+  theme, 
+  code_mirror_commands.history(), 
+  code_mirror_language.foldGutter(),
+  code_mirror_language.syntaxHighlighting(code_mirror_language.defaultHighlightStyle), 
+  code_mirror_view.drawSelection(),
+  code_mirror_view.keymap.of(clojure_mode.complete_keymap), 
+  code_mirror_view.keymap.of(code_mirror_commands.historyKeymap),
+  // clojure_mode.default_extensions[3],
+  // clojure_mode_extensions.extension({modifier: "Meta"}),
+  squintExtension({modifier: "Meta"})
+];
+```
+
+
+```{ojs}
+state = code_mirror_state.EditorState.create(
+  {doc: example_code, 
+  extensions: extensions
+});
+```
+
+```{ojs}
+editorElt = document.querySelector('#editor');
+
+editor = new code_mirror_view.EditorView(
+  {state: state,
+   parent: editorElt,
+   extensions: extensions 
+   });
+```
+
+
+::: {.grid}
+
+::: {.g-col-6}
+
+## Text Editor
+
+<div id="editor"
+     class="rounded-md mb-0 py-2 text-sm monospace overflow-auto relative border shadow-lg bg-white"
+     style="border: 2px dotted lightgray;
+     border-radius: 0.375rem;
+     margin-bottom: 0;
+     padding-top: 0.5rem;
+     padding-bottom: 0.5rem;
+     font-size: 0.875rem;
+     font-family: monospace;
+     overflow: auto;
+     position: relative;
+     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+     background-color: white;">
+</div>
+:::
+
+::: {.g-col-6}
+
+## Hello
+
+<div>
+  <div id="molstar" style="position: relative; width: 100%; height: 400px;">
+</dic>
+
+:::
+
+:::
+
+
+
+<link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/molstar@latest/build/viewer/molstar.css" />
+
+
+
